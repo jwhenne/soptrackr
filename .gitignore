@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vercel
+.vercel
+
+# Env files (secrets — never commit)
+.env
+.env.local
+.env.*.local
+
+# Local SQLite DB
+soptrackr.db
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# TypeScript
+*.tsbuildinfo
+
+# Local scratch
+/tmp/
+
+# Claude Code session metadata
+.claude/

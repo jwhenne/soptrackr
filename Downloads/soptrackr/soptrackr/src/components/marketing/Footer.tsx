@@ -38,7 +38,12 @@ export default function Footer() {
 
         <div className="mt-12 pt-8 border-t border-gray-800 flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-500">
           <p>&copy; {new Date().getFullYear()} SOPTrackr. All rights reserved.</p>
-          <p>Built for automotive dealerships.</p>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-white">Privacy</Link>
+            <Link href="/terms" className="hover:text-white">Terms</Link>
+            <span>·</span>
+            <span>Built for automotive dealerships.</span>
+          </div>
         </div>
       </div>
     </footer>

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { auth } from '@clerk/nextjs/server';
-import { withTenantClient } from '@/lib/db';
+import { query } from '@/lib/db';
 import { getCurrentDbUser } from '@/lib/auth';
 
 export const runtime = 'nodejs';
@@ -51,51 +51,39 @@ export async function POST(request: Request) {
   if (!rooftopBrand) return NextResponse.json({ error: 'Rooftop brand is required' }, { status: 400 });
 
   try {
-    const result = await withTenantClient(userId, async (client) => {
-      // Build a unique slug. Append a short suffix on collision.
-      const baseSlug = slugify(name) || 'dealership';
-      let slug = baseSlug;
-      let attempt = 0;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        const { rowCount } = await client.query('select 1 from organizations where slug = $1', [slug]);
-        if (!rowCount) break;
-        attempt += 1;
-        slug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
-        if (attempt > 5) throw new Error('Could not generate a unique slug');
-      }
+    // Generate a unique slug. We can read organizations.slug without RLS scoping
+    // because slug uniqueness is a global property. The actual creation goes
+    // through the SECURITY DEFINER create_org_with_first_rooftop() function so
+    // the bootstrap inserts bypass RLS atomically.
+    const baseSlug = slugify(name) || 'dealership';
+    let slug = baseSlug;
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const { rowCount } = await query('select 1 from organizations where slug = $1', [slug]);
+      if (!rowCount) break;
+      attempt += 1;
+      slug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+      if (attempt > 5) throw new Error('Could not generate a unique slug');
+    }
 
-      // RLS would normally block an insert here because the user is not yet a
-      // member of any org. We bypass by running the insert as a SECURITY DEFINER
-      // function would, or simply by creating the org + membership atomically
-      // and trusting that the API has already verified the user identity.
-      // For now we just elevate via SET LOCAL role = postgres on the client side
-      // is overkill — since RLS policies on organizations only restrict SELECT
-      // and UPDATE (not INSERT), the insert below will succeed.
-
-      const orgRes = await client.query<{ id: string }>(
-        `insert into organizations (name, slug, created_by)
-         values ($1, $2, $3)
-         returning id`,
-        [name, slug, dbUser.id]
-      );
-      const orgId = orgRes.rows[0].id;
-
-      await client.query(
-        `insert into org_members (org_id, user_id, role)
-         values ($1, $2, 'admin')`,
-        [orgId, dbUser.id]
-      );
-
-      const rooftopRes = await client.query<{ id: string }>(
-        `insert into rooftops (org_id, name, brand, city, state)
-         values ($1, $2, $3, $4, $5)
-         returning id`,
-        [orgId, rooftopName, rooftopBrand, rooftopCity, rooftopState]
-      );
-
-      return { orgId, slug, rooftopId: rooftopRes.rows[0].id };
-    });
+    // Atomic SECURITY DEFINER bootstrap: creates the org + first admin member + first rooftop
+    const { rows: createRows } = await query<{
+      new_org_id: string;
+      new_member_id: string;
+      new_rooftop_id: string;
+    }>(
+      `select * from create_org_with_first_rooftop($1, $2, $3, $4, $5, $6, $7)`,
+      [userId, name, slug, rooftopName, rooftopBrand, rooftopCity, rooftopState]
+    );
+    if (createRows.length === 0) {
+      throw new Error('create_org_with_first_rooftop returned no rows');
+    }
+    const result = {
+      orgId: createRows[0].new_org_id,
+      slug,
+      rooftopId: createRows[0].new_rooftop_id,
+    };
 
     // Fire-and-forget signup notification email so the super admin knows to
     // open a QBO invoice for this dealer. Errors are logged, never thrown.

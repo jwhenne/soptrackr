@@ -9,6 +9,7 @@ import {
   type SopRow,
   type SopStatus,
 } from '@/lib/sops';
+import ScheduleDateModal from './ScheduleDateModal';
 
 type Props = {
   sopId: string;
@@ -35,6 +36,7 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
   const [etaDraft, setEtaDraft] = useState('');
   const [editingStaying, setEditingStaying] = useState(false);
   const [stayingDraft, setStayingDraft] = useState<'yes' | 'no' | ''>('');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   // Reload on open / id change
   useEffect(() => {
@@ -95,9 +97,8 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
 
   async function changeStatus(s: SopStatus, extra: Record<string, unknown> = {}) {
     if (s === 'scheduled') {
-      const date = window.prompt('Enter scheduled install date (YYYY-MM-DD):');
-      if (!date) return;
-      extra = { ...extra, scheduled_at: date };
+      setShowScheduleModal(true);
+      return;
     }
     if (s === 'installed' && !window.confirm(`Mark installed for ${sop?.customer_name}?`)) return;
     if (s === 'complete' && !window.confirm(`Mark job complete for ${sop?.customer_name}?`)) return;
@@ -109,6 +110,14 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
     if (s === 'notified') extra = { ...extra, notified_to_bdc: true };
     const r = await patch({ status: s, ...extra });
     if (r) await onChanged(`Status changed to ${SOP_STATUS_LABELS[s]}`);
+  }
+
+  async function confirmScheduled(date: string) {
+    const r = await patch({ status: 'scheduled', scheduled_at: date });
+    if (r) {
+      setShowScheduleModal(false);
+      await onChanged(`Status changed to ${SOP_STATUS_LABELS.scheduled}`);
+    }
   }
 
   async function deleteSop() {
@@ -183,6 +192,15 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
   const stale = days !== null && days >= RETURN_WARNING_DAYS && sop.status !== 'installed' && sop.status !== 'returned' && sop.status !== 'complete';
 
   return (
+    <>
+    {showScheduleModal && sop && (
+      <ScheduleDateModal
+        customerName={sop.customer_name}
+        partDescription={sop.part_description}
+        onClose={() => setShowScheduleModal(false)}
+        onConfirm={confirmScheduled}
+      />
+    )}
     <Modal onClose={onClose}>
       <h2 className="text-base font-semibold text-gray-900 px-6 pt-6 pb-4">
         {sop.ro_number} — {sop.part_description}
@@ -368,6 +386,7 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
         )}
       </div>
     </Modal>
+    </>
   );
 }
 

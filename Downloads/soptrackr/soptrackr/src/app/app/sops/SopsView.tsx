@@ -10,6 +10,7 @@ import {
 } from '@/lib/sops';
 import type { OrgMembership, Rooftop } from '@/lib/auth';
 import CreateSopModal from './CreateSopModal';
+import ScheduleDateModal from './ScheduleDateModal';
 import SopDetailPanel from './SopDetailPanel';
 
 type CurrentUser = { id: string; firstName: string | null; lastName: string | null; email: string };
@@ -43,6 +44,7 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [schedulingSop, setSchedulingSop] = useState<SopRow | null>(null);
   const [toast, setToast] = useState<{ msg: string; tone: 'green' | 'red' | 'groupme' } | null>(null);
 
   const showToast = useCallback((msg: string, tone: 'green' | 'red' | 'groupme' = 'green') => {
@@ -177,12 +179,14 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
       await loadSops();
     } catch (e) { showToast((e as Error).message, 'red'); }
   }
-  async function markScheduled(o: SopRow) {
-    const date = window.prompt('Enter scheduled install date (YYYY-MM-DD):');
-    if (!date) return;
+  function markScheduled(o: SopRow) {
+    setSchedulingSop(o);
+  }
+  async function confirmScheduled(o: SopRow, date: string) {
     try {
       await patchSop(o.id, { status: 'scheduled', scheduled_at: date });
       showToast(`Install scheduled for ${o.customer_name} on ${date}.`, 'green');
+      setSchedulingSop(null);
       await loadSops();
     } catch (e) { showToast((e as Error).message, 'red'); }
   }
@@ -409,6 +413,16 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
             if (msg) showToast(msg, 'green');
             await loadSops();
           }}
+        />
+      )}
+
+      {/* Schedule install date picker */}
+      {schedulingSop && (
+        <ScheduleDateModal
+          customerName={schedulingSop.customer_name}
+          partDescription={schedulingSop.part_description}
+          onClose={() => setSchedulingSop(null)}
+          onConfirm={(date) => confirmScheduled(schedulingSop, date)}
         />
       )}
 

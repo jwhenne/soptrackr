@@ -124,9 +124,15 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
       if (currentRes.rowCount === 0) throw new Error('Not found');
       const current = currentRes.rows[0];
 
-      // Build dynamic SET clause for normal field updates
+      // Build dynamic SET clause for normal field updates.
+      // Track which columns are already in the SET so the status-transition
+      // logic below doesn't double-assign (Postgres rejects
+      // "multiple assignments to same column"). The most common collision is
+      // status='scheduled' + scheduled_at=<user-picked date>, where the user's
+      // date should win over the auto-now() fallback.
       const sets: string[] = [];
       const params: unknown[] = [];
+      const includedColumns = new Set<string>();
 
       const normalizedVehicleStaying =
         payload.vehicle_staying === true || payload.vehicle_staying === 'yes' ? true :
@@ -145,6 +151,7 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
         }
         params.push(value);
         sets.push(`${field} = $${params.length}`);
+        includedColumns.add(field);
       }
 
       // Status transition?
@@ -157,9 +164,12 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
           statusChange = { from: current.status, to: payload.status };
           params.push(payload.status);
           sets.push(`status = $${params.length}`);
+          includedColumns.add('status');
 
+          // Only auto-set the status-timestamp column if the caller didn't
+          // already provide a value for it in the same PATCH payload.
           const tsCol = STATUS_TIMESTAMP_COLUMN[payload.status];
-          if (tsCol) {
+          if (tsCol && !includedColumns.has(tsCol)) {
             sets.push(`${tsCol} = now()`);
           }
         }

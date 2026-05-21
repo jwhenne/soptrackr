@@ -4,6 +4,7 @@ import { withTenantClient } from '@/lib/db';
 import { getCurrentDbUser, getCurrentUserOrgs } from '@/lib/auth';
 import {
   STATUS_TIMESTAMP_COLUMN,
+  canManageBinLocation,
   isSopStatus,
   type ContactLogRow,
   type SopRow,
@@ -30,6 +31,7 @@ type UpdateSopPayload = {
   eta?: string | null;
   backordered?: boolean;
   notified_to_bdc?: boolean;
+  bin_location?: string | null;
   scheduled_at?: string | null;
   return_reason?: string;
   status_note?: string; // free-text note attached to the status_history row
@@ -51,6 +53,7 @@ const UPDATABLE_FIELDS = [
   'eta',
   'backordered',
   'notified_to_bdc',
+  'bin_location',
   'scheduled_at',
   'return_reason',
 ] as const;
@@ -60,6 +63,7 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   await getCurrentDbUser();
+  const orgs = await getCurrentUserOrgs();
 
   const { id } = ctx.params;
 
@@ -92,7 +96,14 @@ export async function GET(_req: Request, ctx: { params: { id: string } }) {
   if (!result) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
-  return NextResponse.json(result);
+
+  // Strip sensitive bin_location unless the user's role in this SOP's org allows it.
+  const role = orgs.find((o) => o.org_id === result.sop.org_id)?.role;
+  const sop = canManageBinLocation(role)
+    ? result.sop
+    : (({ bin_location: _omit, ...rest }) => rest as SopRow)(result.sop);
+
+  return NextResponse.json({ ...result, sop });
 }
 
 // PATCH /api/sops/:id — update fields and/or status
@@ -123,6 +134,14 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
       );
       if (currentRes.rowCount === 0) throw new Error('Not found');
       const current = currentRes.rows[0];
+
+      // Bin location is sensitive — only admin/manager/parts_consultant may write it.
+      const canBin = canManageBinLocation(
+        orgs.find((o) => o.org_id === current.org_id)?.role
+      );
+      if (payload.bin_location !== undefined && !canBin) {
+        throw new Error('Forbidden: bin_location');
+      }
 
       // Build dynamic SET clause for normal field updates.
       // Track which columns are already in the SET so the status-transition
@@ -241,7 +260,7 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
         }
       }
 
-      return { sop: fresh.rows[0], statusChanged: statusChange, groupmeJob };
+      return { sop: fresh.rows[0], statusChanged: statusChange, groupmeJob, canBin };
     });
 
     // Fire GroupMe outside the DB transaction (best-effort, doesn't block).
@@ -253,10 +272,18 @@ export async function PATCH(request: Request, ctx: { params: { id: string } }) {
       });
     }
 
-    return NextResponse.json({ ok: true, sop: result.sop, statusChanged: result.statusChanged });
+    // Strip bin_location from the response for roles that can't see it.
+    const sopOut = result.canBin
+      ? result.sop
+      : (({ bin_location: _omit, ...rest }) => rest as SopRow)(result.sop);
+
+    return NextResponse.json({ ok: true, sop: sopOut, statusChanged: result.statusChanged });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const status = message === 'Not found' ? 404 : 500;
+    const status =
+      message === 'Not found' ? 404 :
+      message === 'Forbidden: bin_location' ? 403 :
+      500;
     console.error('[sops.update] failed:', message);
     return NextResponse.json({ error: message }, { status });
   }

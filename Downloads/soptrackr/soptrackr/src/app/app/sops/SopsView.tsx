@@ -5,6 +5,7 @@ import {
   SOP_STATUS_LABELS,
   SOP_STATUS_BADGE_CLASS,
   RETURN_WARNING_DAYS,
+  canManageBinLocation,
   type SopRow,
   type SopStatus,
 } from '@/lib/sops';
@@ -29,6 +30,7 @@ type RepTab = { name: string; count: number; sop_ids: string[] };
 type TabValue = 'all' | SopStatus | `rep:${string}`;
 
 export default function SopsView({ currentUser, org, rooftops }: Props) {
+  const canBin = canManageBinLocation(org.role);
   const [sops, setSops] = useState<SopRow[]>([]);
   const [totals, setTotals] = useState<Totals>({});
   const [repTabs, setRepTabs] = useState<RepTab[]>([]);
@@ -125,12 +127,13 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
         const hay = [
           o.sop_number, o.ro_number, o.customer_name, o.customer_phone,
           o.part_description, o.part_number, o.vehicle, o.advisor,
+          canBin ? o.bin_location : null,
         ].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [sops, activeTab, statFilter, statusDropdown, search, repSopIds]);
+  }, [sops, activeTab, statFilter, statusDropdown, search, repSopIds, canBin]);
 
   function clickStat(filter: 'active' | 'transit' | 'awaiting' | 'scheduled') {
     if (filter === 'active') {
@@ -311,6 +314,7 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
                 <Th>Part / RO#</Th>
                 <Th>Customer</Th>
                 <Th>Part #</Th>
+                {canBin && <Th>Bin</Th>}
                 <Th>Est. arrival</Th>
                 <Th>Vehicle staying?</Th>
                 <Th>Status</Th>
@@ -319,10 +323,10 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
             </thead>
             <tbody>
               {loading && (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">Loading orders...</td></tr>
+                <tr><td colSpan={canBin ? 8 : 7} className="px-4 py-8 text-center text-sm text-gray-500">Loading orders...</td></tr>
               )}
               {!loading && filteredSops.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-gray-500">No orders found</td></tr>
+                <tr><td colSpan={canBin ? 8 : 7} className="px-4 py-12 text-center text-sm text-gray-500">No orders found</td></tr>
               )}
               {!loading && filteredSops.map((o) => {
                 const stale = o.days_since_arrived !== null && o.days_since_arrived >= RETURN_WARNING_DAYS;
@@ -345,6 +349,9 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
                       <div className="text-xs text-gray-500">{o.customer_phone || ''}</div>
                     </Td>
                     <Td className="text-xs text-gray-500 font-mono">{o.part_number || '—'}</Td>
+                    {canBin && (
+                      <Td className="text-[13px] font-mono font-semibold text-gray-900">{o.bin_location || '—'}</Td>
+                    )}
                     <Td className="text-[13px]">{o.eta || '—'}</Td>
                     <Td>{vehicleStayingBadge(o.vehicle_staying)}</Td>
                     <Td>
@@ -408,6 +415,7 @@ export default function SopsView({ currentUser, org, rooftops }: Props) {
       {selectedId && (
         <SopDetailPanel
           sopId={selectedId}
+          canBin={canBin}
           onClose={() => setSelectedId(null)}
           onChanged={async (msg) => {
             if (msg) showToast(msg, 'green');

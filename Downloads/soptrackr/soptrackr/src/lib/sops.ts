@@ -71,6 +71,7 @@ export type SopRow = {
   eta: string | null;            // YYYY-MM-DD
   backordered: boolean;
   notified_to_bdc: boolean;
+  bin_location: string | null;   // sensitive: only admin/manager/parts_consultant
   status: SopStatus;
   ordered_at: string;
   in_transit_at: string | null;
@@ -109,3 +110,13 @@ export type StatusHistoryRow = {
 
 // 30-day return warning threshold (matches the existing Toyota app).
 export const RETURN_WARNING_DAYS = 30;
+
+// ---------------------------------------------------------------------------
+// Bin location is sensitive inventory data. Only these roles may view or edit
+// it; service_advisor and technician never receive the value. This is enforced
+// server-side (the field is stripped from API responses for other roles) and
+// mirrored in the UI.
+// ---------------------------------------------------------------------------
+export function canManageBinLocation(role: string | null | undefined): boolean {
+  return role === 'admin' || role === 'manager' || role === 'parts_consultant';
+}

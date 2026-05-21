@@ -13,6 +13,7 @@ import ScheduleDateModal from './ScheduleDateModal';
 
 type Props = {
   sopId: string;
+  canBin: boolean;
   onClose: () => void;
   onChanged: (msg?: string) => void | Promise<void>;
 };
@@ -24,7 +25,7 @@ const RESULT_OPTIONS: Array<{ value: string; label: string; cls: string }> = [
   { value: 'scheduled',      label: 'Appt scheduled',    cls: 'bg-sop-notified-bg text-sop-notified-fg' },
 ];
 
-export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
+export default function SopDetailPanel({ sopId, canBin, onClose, onChanged }: Props) {
   const [sop, setSop] = useState<SopRow | null>(null);
   const [contacts, setContacts] = useState<ContactLogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,6 +37,8 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
   const [etaDraft, setEtaDraft] = useState('');
   const [editingStaying, setEditingStaying] = useState(false);
   const [stayingDraft, setStayingDraft] = useState<'yes' | 'no' | ''>('');
+  const [editingBin, setEditingBin] = useState(false);
+  const [binDraft, setBinDraft] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
   // Reload on open / id change
@@ -52,6 +55,7 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
         setContacts(data.contactLog);
         setEtaDraft(data.sop.eta || '');
         setStayingDraft(data.sop.vehicle_staying === true ? 'yes' : data.sop.vehicle_staying === false ? 'no' : '');
+        setBinDraft(data.sop.bin_location || '');
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load');
       } finally {
@@ -93,6 +97,10 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
   async function saveStaying() {
     const r = await patch({ vehicle_staying: stayingDraft });
     if (r) { setEditingStaying(false); await onChanged('Vehicle staying updated'); }
+  }
+  async function saveBin() {
+    const r = await patch({ bin_location: binDraft.trim() || null });
+    if (r) { setEditingBin(false); await onChanged('Bin location updated'); }
   }
 
   async function changeStatus(s: SopStatus, extra: Record<string, unknown> = {}) {
@@ -227,6 +235,28 @@ export default function SopDetailPanel({ sopId, onClose, onChanged }: Props) {
           <tbody>
             <Row label="SOP number"><span className="font-bold text-oem-red">{sop.sop_number || '—'}</span></Row>
             <Row label="Part number"><span className="font-semibold">{sop.part_number || '—'}</span></Row>
+            {canBin && (
+              <Row label="Bin location">
+                {editingBin ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <input
+                      type="text"
+                      value={binDraft}
+                      onChange={(e) => setBinDraft(e.target.value)}
+                      placeholder="e.g. A1-05"
+                      className="text-[13px] px-2 py-1 border border-oem-red rounded-md outline-none font-mono w-32"
+                    />
+                    <SmallBtn variant="primary" onClick={saveBin} disabled={saving}>Save</SmallBtn>
+                    <SmallBtn onClick={() => { setBinDraft(sop.bin_location || ''); setEditingBin(false); }}>Cancel</SmallBtn>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-semibold">{sop.bin_location || '—'}</span>
+                    <SmallBtn onClick={() => setEditingBin(true)}>Edit</SmallBtn>
+                  </div>
+                )}
+              </Row>
+            )}
             <Row label="Est. arrival">
               {editingEta ? (
                 <div className="flex items-center gap-2 flex-wrap">

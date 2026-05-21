@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { withTenantClient } from '@/lib/db';
 import { getCurrentDbUser, getCurrentUserOrgs } from '@/lib/auth';
-import { isSopStatus, type SopRow } from '@/lib/sops';
+import { canManageBinLocation, isSopStatus, type SopRow } from '@/lib/sops';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -83,7 +83,17 @@ export async function GET(request: Request) {
     sop_ids: r.sop_ids,
   }));
 
-  return NextResponse.json({ sops: sopsResult.rows, totals, repTabs });
+  // Strip the sensitive bin_location from any SOP whose org the current user
+  // isn't permitted to see bin data for. Server-side gate — the value never
+  // reaches an unauthorized browser regardless of the UI.
+  const roleByOrg = new Map(orgs.map((o) => [o.org_id, o.role]));
+  const sops = sopsResult.rows.map((s) => {
+    if (canManageBinLocation(roleByOrg.get(s.org_id))) return s;
+    const { bin_location: _omit, ...rest } = s;
+    return rest as SopRow;
+  });
+
+  return NextResponse.json({ sops, totals, repTabs });
 }
 
 type CreateSopPayload = {

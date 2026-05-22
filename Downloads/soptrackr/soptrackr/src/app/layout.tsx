@@ -44,7 +44,11 @@ export const metadata: Metadata = {
       'Stop chasing special order parts. Track every SOP from PO to install.',
     images: ['/logo-full.svg'],
   },
-  robots: { index: false, follow: false },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
 }
 
 export default function RootLayout({

@@ -6,6 +6,8 @@ import { getCurrentUserOrgs } from '@/lib/auth';
 
 export const metadata = {
   title: 'Dashboard — SOPTrackr',
+  // Private, authenticated area — keep it out of search results.
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = 'force-dynamic';

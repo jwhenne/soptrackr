@@ -4,6 +4,7 @@ import Link from 'next/link';
 export const metadata = {
   title: 'Sign in — SOPTrackr',
   description: 'Sign in to your SOPTrackr dealership portal.',
+  robots: { index: false, follow: false },
 };
 
 export default function SignInPage() {

@@ -4,6 +4,7 @@ import Link from 'next/link';
 export const metadata = {
   title: 'Create account — SOPTrackr',
   description: 'Get your dealership started with SOPTrackr.',
+  robots: { index: false, follow: false },
 };
 
 export default function SignUpPage() {

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { Inter, Lexend } from 'next/font/google'
 import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
@@ -7,6 +8,11 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const lexend = Lexend({ subsets: ['latin'], variable: '--font-lexend' })
 
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://soptrackr.com';
+
+// Google Analytics 4 — fires only in production builds so local dev sessions
+// don't pollute the data. Site-wide via the root layout.
+const GA_MEASUREMENT_ID = 'G-H76XLG858V';
+const gaEnabled = process.env.NODE_ENV === 'production';
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -68,6 +74,22 @@ export default function RootLayout({
       <html lang="en" className={`${inter.variable} ${lexend.variable}`}>
         <body className={inter.className}>
           {children}
+          {gaEnabled && (
+            <>
+              <Script
+                src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+                strategy="afterInteractive"
+              />
+              <Script id="ga4-init" strategy="afterInteractive">
+                {`
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', '${GA_MEASUREMENT_ID}');
+                `}
+              </Script>
+            </>
+          )}
         </body>
       </html>
     </ClerkProvider>
